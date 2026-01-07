@@ -440,42 +440,28 @@ export default function QuoteCreate() {
   const handleSubmit = async (status = 'draft') => {
     const { subtotal, taxAmount, totalAmount, costTotal, profit, profitRate } = calculateTotals()
 
+    // 空文字をnullに変換（日付フィールド用）
+    const cleanDate = (val) => val && val.trim() !== '' ? val : null
+
     const quoteData = {
-      ...coverData,
       client_id: coverData.client_id ? parseInt(coverData.client_id) : null,
-      status,
-      subtotal,
-      tax_amount: taxAmount,
-      total_amount: totalAmount,
-      cost_amount: costTotal,
-      profit_amount: profit,
-      profit_rate: profitRate,
+      project_name: coverData.project_name || '無題の見積',
+      site_name: coverData.site_name || null,
+      site_address: coverData.site_address || null,
+      quote_date: cleanDate(coverData.quote_date),
+      valid_until: cleanDate(coverData.valid_until),
+      notes: coverData.notes || null,
+      tax_rate: 10,
       items: items.map((item, idx) => ({
         item_order: idx + 1,
-        category: item.category,
-        description: item.description,
-        specification: item.specification,
-        quantity: parseFloat(item.quantity) || 0,
-        unit: item.unit,
+        category: item.category || null,
+        description: item.description || '項目',
+        specification: item.specification || null,
+        quantity: parseFloat(item.quantity) || 1,
+        unit: item.unit || '式',
         unit_price: parseFloat(item.unit_price) || 0,
         cost_price: parseFloat(item.cost_price) || 0,
-        amount: (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0),
-        cost_amount: (parseFloat(item.quantity) || 0) * (parseFloat(item.cost_price) || 0),
-        budgets: item.budgets,
       })),
-      conditions: conditions.map(c => ({
-        category: c.category,
-        content: c.content,
-      })),
-      confirmation: {
-        items: confirmationItems.map(c => ({
-          item: c.item,
-          client: c.client,
-          company: c.company,
-          paid_supply: c.paid_supply,
-        })),
-        special_notes: specialNotes,
-      }
     }
 
     try {
