@@ -2,11 +2,35 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 
+// 予算種別（1.0と同じ）
+const BUDGET_TYPES = [
+  { value: '労務費', label: '労務', color: '#3b82f6' },
+  { value: '外注費', label: '外注', color: '#8b5cf6' },
+  { value: '材料費', label: '材料', color: '#10b981' },
+  { value: '機械', label: '機械', color: '#f59e0b' },
+  { value: '経費', label: '経費', color: '#6b7280' },
+  { value: 'その他', label: '他', color: '#94a3b8' },
+]
+
+// 空の予算明細を作成
+const createEmptyBudget = () => ({
+  type: '労務費',
+  spec: '',
+  quantity: '',
+  unit: '',
+  unitPrice: '',
+  estimatePrice: '',
+  amount: '',
+  estimateAmount: '',
+  remarks: '',
+})
+
 export default function QuoteCreate() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [clients, setClients] = useState([])
-  const [activeTab, setActiveTab] = useState('cover') // cover, details, conditions, confirmation
+  const [activeTab, setActiveTab] = useState('cover')
+  const [expandedRows, setExpandedRows] = useState({}) // 展開行の管理
 
   // 表紙データ
   const [coverData, setCoverData] = useState({
@@ -19,9 +43,19 @@ export default function QuoteCreate() {
     notes: '',
   })
 
-  // 内訳データ
+  // 内訳データ（予算明細付き）
   const [items, setItems] = useState([
-    { id: 1, category: '', description: '', specification: '', quantity: 1, unit: '式', unit_price: 0, cost_price: 0 }
+    {
+      id: 1,
+      category: '',
+      description: '',
+      specification: '',
+      quantity: 1,
+      unit: '式',
+      unit_price: 0,
+      cost_price: 0,
+      budgets: [createEmptyBudget()], // 予算明細
+    }
   ])
 
   // 条件書データ
@@ -31,7 +65,7 @@ export default function QuoteCreate() {
     { id: 3, category: '工期', content: '' },
   ])
 
-  // 確認書データ（負担区分）
+  // 確認書データ
   const [confirmationItems, setConfirmationItems] = useState([
     { id: 1, item: '仮設工事', client: false, company: true, paid_supply: false },
     { id: 2, item: '電気工事', client: false, company: true, paid_supply: false },
@@ -55,10 +89,25 @@ export default function QuoteCreate() {
     }
   }
 
+  // 行の展開/折りたたみ
+  const toggleExpand = (rowIndex) => {
+    setExpandedRows(prev => ({ ...prev, [rowIndex]: !prev[rowIndex] }))
+  }
+
   // 内訳の操作
   const handleAddItem = () => {
     const newId = Math.max(...items.map(i => i.id), 0) + 1
-    setItems([...items, { id: newId, category: '', description: '', specification: '', quantity: 1, unit: '式', unit_price: 0, cost_price: 0 }])
+    setItems([...items, {
+      id: newId,
+      category: '',
+      description: '',
+      specification: '',
+      quantity: 1,
+      unit: '式',
+      unit_price: 0,
+      cost_price: 0,
+      budgets: [createEmptyBudget()],
+    }])
   }
 
   const handleRemoveItem = (id) => {
@@ -71,6 +120,63 @@ export default function QuoteCreate() {
     setItems(items.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ))
+  }
+
+  // 予算明細の操作
+  const handleAddBudget = (itemId) => {
+    setItems(items.map(item =>
+      item.id === itemId
+        ? { ...item, budgets: [...item.budgets, createEmptyBudget()] }
+        : item
+    ))
+  }
+
+  const handleRemoveBudget = (itemId, budgetIndex) => {
+    setItems(items.map(item => {
+      if (item.id === itemId && item.budgets.length > 1) {
+        const newBudgets = [...item.budgets]
+        newBudgets.splice(budgetIndex, 1)
+        return { ...item, budgets: newBudgets }
+      }
+      return item
+    }))
+  }
+
+  const handleBudgetChange = (itemId, budgetIndex, field, value) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const newBudgets = [...item.budgets]
+        newBudgets[budgetIndex] = { ...newBudgets[budgetIndex], [field]: value }
+
+        // 金額自動計算
+        if (field === 'quantity' || field === 'unitPrice') {
+          const qty = field === 'quantity' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].quantity) || 0
+          const price = field === 'unitPrice' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].unitPrice) || 0
+          newBudgets[budgetIndex].amount = qty * price
+        }
+        if (field === 'quantity' || field === 'estimatePrice') {
+          const qty = field === 'quantity' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].quantity) || 0
+          const price = field === 'estimatePrice' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].estimatePrice) || 0
+          newBudgets[budgetIndex].estimateAmount = qty * price
+        }
+
+        return { ...item, budgets: newBudgets }
+      }
+      return item
+    }))
+  }
+
+  // 予算合計の計算
+  const getBudgetTotal = (budgets) => {
+    return budgets.reduce((sum, b) => sum + (parseFloat(b.amount) || 0), 0)
+  }
+
+  const getEstimateTotal = (budgets) => {
+    return budgets.reduce((sum, b) => sum + (parseFloat(b.estimateAmount) || 0), 0)
+  }
+
+  const getProfit = (budgets) => {
+    return getEstimateTotal(budgets) - getBudgetTotal(budgets)
   }
 
   // 条件書の操作
@@ -124,12 +230,15 @@ export default function QuoteCreate() {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount || 0)
   }
 
+  const formatNumber = (num) => {
+    return new Intl.NumberFormat('ja-JP').format(num || 0)
+  }
+
   // Excel取込
   const handleExcelImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
 
-    // ファイル形式チェック
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       alert('Excel形式(.xlsx, .xls)のファイルを選択してください')
       return
@@ -140,12 +249,10 @@ export default function QuoteCreate() {
 
     try {
       setLoading(true)
-      // Note: Don't set Content-Type header for FormData - browser sets it automatically with boundary
       const data = await api.post('/quotes/import-excel', formData)
       console.log('Excel import response:', data)
 
       if (data && data.success) {
-        // 表紙データ
         if (data.cover) {
           setCoverData(prev => ({
             ...prev,
@@ -155,7 +262,6 @@ export default function QuoteCreate() {
             quote_date: data.cover.quote_date || prev.quote_date,
           }))
         }
-        // 内訳データ
         if (data.items && data.items.length > 0) {
           setItems(data.items.map((item, idx) => ({
             id: idx + 1,
@@ -166,9 +272,9 @@ export default function QuoteCreate() {
             unit: item.unit || '式',
             unit_price: item.unit_price || 0,
             cost_price: item.cost_price || 0,
+            budgets: [createEmptyBudget()],
           })))
         }
-        // 条件書データ
         if (data.conditions && data.conditions.length > 0) {
           setConditions(data.conditions.map((c, idx) => ({
             id: idx + 1,
@@ -176,7 +282,6 @@ export default function QuoteCreate() {
             content: c.content || '',
           })))
         }
-        // 確認書データ
         if (data.confirmation && data.confirmation.items && data.confirmation.items.length > 0) {
           setConfirmationItems(data.confirmation.items.map((c, idx) => ({
             id: idx + 1,
@@ -189,7 +294,6 @@ export default function QuoteCreate() {
         if (data.confirmation && data.confirmation.special_notes) {
           setSpecialNotes(data.confirmation.special_notes)
         }
-
         alert(data.message || 'Excelファイルを読み込みました')
       } else {
         alert('Excelファイルの読み込みに失敗しました')
@@ -200,7 +304,6 @@ export default function QuoteCreate() {
       alert(errorMsg)
     } finally {
       setLoading(false)
-      // ファイル入力をリセット
       e.target.value = ''
     }
   }
@@ -230,6 +333,7 @@ export default function QuoteCreate() {
         cost_price: parseFloat(item.cost_price) || 0,
         amount: (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0),
         cost_amount: (parseFloat(item.quantity) || 0) * (parseFloat(item.cost_price) || 0),
+        budgets: item.budgets,
       })),
       conditions: conditions.map(c => ({
         category: c.category,
@@ -267,6 +371,12 @@ export default function QuoteCreate() {
     { id: 'confirmation', label: '確認書', icon: '✅' },
   ]
 
+  // 予算種別のカラー取得
+  const getBudgetTypeColor = (type) => {
+    const found = BUDGET_TYPES.find(t => t.value === type)
+    return found ? found.color : '#6b7280'
+  }
+
   return (
     <div className="min-h-screen bg-navy-gradient relative overflow-hidden">
       <div className="orb" style={{ width: '400px', height: '400px', background: 'rgba(249, 115, 22, 0.2)', top: '-10%', left: '-10%' }} />
@@ -288,7 +398,6 @@ export default function QuoteCreate() {
             </div>
           </div>
 
-          {/* Excel取込ボタン（メイン機能） */}
           <label className="glass-button glass-blue rounded-xl px-6 py-3 text-white font-semibold cursor-pointer hover:bg-blue-500/40 flex items-center gap-2">
             <span className="text-xl">📥</span>
             <span>Excel取込</span>
@@ -440,12 +549,13 @@ export default function QuoteCreate() {
             </div>
           )}
 
-          {/* 内訳タブ */}
+          {/* 内訳タブ（展開可能な予算明細付き） */}
           {activeTab === 'details' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-white font-semibold text-lg flex items-center gap-2">
                   <span>📋</span> 内訳明細
+                  <span className="text-gray-400 text-sm font-normal ml-2">※ 行をクリックで予算明細を展開</span>
                 </h2>
                 <button
                   onClick={handleAddItem}
@@ -459,6 +569,7 @@ export default function QuoteCreate() {
                 <table className="w-full min-w-[1000px]">
                   <thead>
                     <tr className="border-b border-white/10">
+                      <th className="w-8"></th>
                       <th className="text-left text-gray-400 text-sm py-2 px-2 w-24">分類</th>
                       <th className="text-left text-gray-400 text-sm py-2 px-2">項目名</th>
                       <th className="text-left text-gray-400 text-sm py-2 px-2 w-32">仕様</th>
@@ -471,89 +582,225 @@ export default function QuoteCreate() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id} className="border-b border-white/5">
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.category}
-                            onChange={(e) => handleItemChange(item.id, 'category', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
-                            placeholder="分類"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm"
-                            placeholder="項目名"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.specification}
-                            onChange={(e) => handleItemChange(item.id, 'specification', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
-                            placeholder="仕様"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <select
-                            value={item.unit}
-                            onChange={(e) => handleItemChange(item.id, 'unit', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-1 py-2 text-white text-sm"
-                          >
-                            <option value="式">式</option>
-                            <option value="個">個</option>
-                            <option value="本">本</option>
-                            <option value="m">m</option>
-                            <option value="m2">m2</option>
-                            <option value="m3">m3</option>
-                            <option value="kg">kg</option>
-                            <option value="t">t</option>
-                            <option value="台">台</option>
-                            <option value="人工">人工</option>
-                          </select>
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="number"
-                            value={item.unit_price}
-                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="number"
-                            value={item.cost_price}
-                            onChange={(e) => handleItemChange(item.id, 'cost_price', e.target.value)}
-                            className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-gray-300 text-sm text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2 text-right text-white font-medium">
-                          {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0))}
-                        </td>
-                        <td className="py-2 px-2">
-                          <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-red-400 hover:text-red-300 text-lg p-1"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
+                    {items.map((item, index) => (
+                      <>
+                        {/* 親行（クリックで展開） */}
+                        <tr
+                          key={item.id}
+                          className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${expandedRows[index] ? 'bg-white/10' : ''}`}
+                          onClick={() => toggleExpand(index)}
+                        >
+                          <td className="py-2 px-2 text-center">
+                            <span className="text-gray-400 text-lg">
+                              {expandedRows[index] ? '▼' : '▶'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={item.category}
+                              onChange={(e) => handleItemChange(item.id, 'category', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
+                              placeholder="分類"
+                            />
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm"
+                              placeholder="項目名"
+                            />
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={item.specification}
+                              onChange={(e) => handleItemChange(item.id, 'specification', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
+                              placeholder="仕様"
+                            />
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
+                            />
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <select
+                              value={item.unit}
+                              onChange={(e) => handleItemChange(item.id, 'unit', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-1 py-2 text-white text-sm"
+                            >
+                              <option value="式">式</option>
+                              <option value="個">個</option>
+                              <option value="本">本</option>
+                              <option value="m">m</option>
+                              <option value="m2">m2</option>
+                              <option value="m3">m3</option>
+                              <option value="kg">kg</option>
+                              <option value="t">t</option>
+                              <option value="台">台</option>
+                              <option value="人工">人工</option>
+                            </select>
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              value={item.unit_price}
+                              onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
+                            />
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              value={item.cost_price}
+                              onChange={(e) => handleItemChange(item.id, 'cost_price', e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-gray-300 text-sm text-right"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-right text-white font-medium">
+                            {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0))}
+                          </td>
+                          <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-red-400 hover:text-red-300 text-lg p-1"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* 展開された予算明細行 */}
+                        {expandedRows[index] && (
+                          <tr key={`budget-${item.id}`}>
+                            <td colSpan={10} className="bg-white/5 px-4 py-4">
+                              <div className="ml-8">
+                                {/* 予算サマリー */}
+                                <div className="flex items-center gap-6 mb-4 pb-3 border-b border-white/10">
+                                  <div>
+                                    <span className="text-gray-400 text-xs">予算合計</span>
+                                    <span className="text-blue-400 font-bold ml-2">{formatCurrency(getBudgetTotal(item.budgets))}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 text-xs">見積金額</span>
+                                    <span className="text-orange-400 font-bold ml-2">{formatCurrency(getEstimateTotal(item.budgets))}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 text-xs">粗利</span>
+                                    <span className={`font-bold ml-2 ${getProfit(item.budgets) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                      {formatCurrency(getProfit(item.budgets))}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleAddBudget(item.id)}
+                                    className="ml-auto glass-button rounded-lg px-3 py-1 text-white text-xs flex items-center gap-1"
+                                  >
+                                    ➕ 明細追加
+                                  </button>
+                                </div>
+
+                                {/* 予算明細テーブル */}
+                                <table className="w-full">
+                                  <thead>
+                                    <tr className="border-b border-white/10">
+                                      <th className="text-left text-gray-400 text-xs py-2 px-2 w-24">種別</th>
+                                      <th className="text-left text-gray-400 text-xs py-2 px-2">仕様・内容</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-16">数量</th>
+                                      <th className="text-center text-gray-400 text-xs py-2 px-2 w-14">単位</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">予算単価</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">見積単価</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">予算金額</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">見積金額</th>
+                                      <th className="w-10"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {item.budgets.map((budget, bIndex) => (
+                                      <tr key={bIndex} className="border-b border-white/5">
+                                        <td className="py-1 px-2">
+                                          <select
+                                            value={budget.type}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'type', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-1 py-1 text-xs"
+                                            style={{ color: getBudgetTypeColor(budget.type) }}
+                                          >
+                                            {BUDGET_TYPES.map(t => (
+                                              <option key={t.value} value={t.value}>{t.label}</option>
+                                            ))}
+                                          </select>
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <input
+                                            type="text"
+                                            value={budget.spec}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'spec', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-white text-xs"
+                                            placeholder="仕様・内容"
+                                          />
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <input
+                                            type="number"
+                                            value={budget.quantity}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'quantity', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-1 py-1 text-white text-xs text-right"
+                                          />
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <input
+                                            type="text"
+                                            value={budget.unit}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'unit', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-1 py-1 text-white text-xs text-center"
+                                            placeholder="式"
+                                          />
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <input
+                                            type="number"
+                                            value={budget.unitPrice}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'unitPrice', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-1 py-1 text-blue-300 text-xs text-right"
+                                          />
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <input
+                                            type="number"
+                                            value={budget.estimatePrice}
+                                            onChange={(e) => handleBudgetChange(item.id, bIndex, 'estimatePrice', e.target.value)}
+                                            className="w-full bg-white/10 border border-white/20 rounded px-1 py-1 text-orange-300 text-xs text-right"
+                                          />
+                                        </td>
+                                        <td className="py-1 px-2 text-right text-blue-400 text-xs font-medium">
+                                          {formatNumber(budget.amount || 0)}
+                                        </td>
+                                        <td className="py-1 px-2 text-right text-orange-400 text-xs font-medium">
+                                          {formatNumber(budget.estimateAmount || 0)}
+                                        </td>
+                                        <td className="py-1 px-2">
+                                          <button
+                                            onClick={() => handleRemoveBudget(item.id, bIndex)}
+                                            className="text-red-400 hover:text-red-300 text-sm"
+                                          >
+                                            ✕
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>
