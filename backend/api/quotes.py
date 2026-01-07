@@ -285,12 +285,9 @@ async def import_excel(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Excelファイルから見積データを読み込む
-    対応フォーマット:
-    - 表紙シート: 工事名、現場名、現場住所などの基本情報
-    - 内訳シート: 項目明細（分類、項目名、仕様、数量、単位、単価、原価）
-    - 条件書シート: 工事条件
-    - 確認書シート: 負担区分
+    Excelファイルから見積データを読み込む（1.0互換方式）
+    - 全シートをスキャンして情報を抽出
+    - 柔軟なセル解析で様々なフォーマットに対応
     """
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Excelファイル(.xlsx, .xls)のみ対応しています")
@@ -306,151 +303,209 @@ async def import_excel(
             "confirmation": {"items": [], "special_notes": ""}
         }
 
-        # シート名で検索（柔軟に対応）
         sheet_names = wb.sheetnames
 
-        # 表紙シートの解析
-        cover_sheet = None
-        for name in sheet_names:
-            if '表紙' in name or 'cover' in name.lower() or name == sheet_names[0]:
-                cover_sheet = wb[name]
-                break
+        # スキップするキーワード
+        skip_keywords = ['小計', '合計', '端数調整', '法定福利費', '諸経費計', '消費税']
+        # 単位として認識するキーワード
+        unit_keywords = ['式', '個', '本', 'm', 'm2', 'm3', 'kg', 't', 'L', '人工', '台', '日', '往復', 'セット', '箇所', '回']
 
-        if cover_sheet:
-            # セルを走査して工事名、現場名などを抽出
-            for row in cover_sheet.iter_rows(min_row=1, max_row=30, max_col=10):
+        # ============ 1. 表紙・基本情報の解析 ============
+        for sheet_name in sheet_names:
+            ws = wb[sheet_name]
+
+            for row in ws.iter_rows(min_row=1, max_row=50, max_col=15):
                 for cell in row:
-                    if cell.value:
-                        cell_str = str(cell.value).strip()
-                        # 工事名を検索
-                        if '工事名' in cell_str or 'プロジェクト' in cell_str:
-                            next_cell = cover_sheet.cell(row=cell.row, column=cell.column + 1)
-                            if next_cell.value:
+                    if cell.value is None:
+                        continue
+
+                    val = str(cell.value).strip()
+
+                    # 宛先（御中）
+                    if '御中' in val and not result["cover"].get("client"):
+                        result["cover"]["client"] = val.replace('御中', '').replace('　', ' ').strip()
+
+                    # 工事名
+                    if '工事名' in val.replace(' ', '').replace('　', ''):
+                        for c in range(cell.column + 1, min(cell.column + 6, 20)):
+                            next_cell = ws.cell(row=cell.row, column=c)
+                            if next_cell.value and len(str(next_cell.value).strip()) > 3:
                                 result["cover"]["project_name"] = str(next_cell.value).strip()
-                        # 現場名
-                        if '現場名' in cell_str:
-                            next_cell = cover_sheet.cell(row=cell.row, column=cell.column + 1)
+                                break
+
+                    # 工事場所・現場名
+                    if '工事場所' in val or '現場名' in val:
+                        for c in range(cell.column + 1, min(cell.column + 6, 20)):
+                            next_cell = ws.cell(row=cell.row, column=c)
                             if next_cell.value:
                                 result["cover"]["site_name"] = str(next_cell.value).strip()
-                        # 現場住所
-                        if '住所' in cell_str or '現場住所' in cell_str:
-                            next_cell = cover_sheet.cell(row=cell.row, column=cell.column + 1)
+                                break
+
+                    # 住所
+                    if '住所' in val and '現場' not in val:
+                        for c in range(cell.column + 1, min(cell.column + 6, 20)):
+                            next_cell = ws.cell(row=cell.row, column=c)
                             if next_cell.value:
                                 result["cover"]["site_address"] = str(next_cell.value).strip()
-                        # 見積日
-                        if '見積日' in cell_str or '日付' in cell_str:
-                            next_cell = cover_sheet.cell(row=cell.row, column=cell.column + 1)
+                                break
+
+                    # 見積日・日付
+                    if ('見積日' in val or '日付' in val) and not result["cover"].get("quote_date"):
+                        for c in range(cell.column + 1, min(cell.column + 6, 20)):
+                            next_cell = ws.cell(row=cell.row, column=c)
                             if next_cell.value:
                                 if isinstance(next_cell.value, datetime):
                                     result["cover"]["quote_date"] = next_cell.value.strftime('%Y-%m-%d')
                                 else:
-                                    result["cover"]["quote_date"] = str(next_cell.value)
+                                    result["cover"]["quote_date"] = str(next_cell.value).strip()
+                                break
 
-        # 内訳シートの解析
-        detail_sheet = None
-        for name in sheet_names:
-            if '内訳' in name or '明細' in name or 'detail' in name.lower():
-                detail_sheet = wb[name]
-                break
+        # ============ 2. 内訳明細の解析 ============
+        for sheet_name in sheet_names:
+            # 条件書シートはスキップ
+            if '条件' in sheet_name:
+                continue
 
-        if detail_sheet:
-            # ヘッダー行を特定
-            header_row = None
-            headers = {}
-            for row_num, row in enumerate(detail_sheet.iter_rows(min_row=1, max_row=10), start=1):
-                for col_num, cell in enumerate(row, start=1):
-                    if cell.value:
-                        cell_str = str(cell.value).strip()
-                        if any(keyword in cell_str for keyword in ['分類', '項目', '品名', '名称', '仕様', '数量', '単位', '単価', '金額', '原価']):
-                            header_row = row_num
-                            break
-                if header_row:
-                    break
+            ws = wb[sheet_name]
 
-            if header_row:
-                # ヘッダーをマッピング
-                for col_num, cell in enumerate(detail_sheet[header_row], start=1):
-                    if cell.value:
-                        cell_str = str(cell.value).strip()
-                        if '分類' in cell_str or 'カテゴリ' in cell_str:
-                            headers['category'] = col_num
-                        elif '項目' in cell_str or '品名' in cell_str or '名称' in cell_str or '摘要' in cell_str:
-                            headers['description'] = col_num
-                        elif '仕様' in cell_str or '規格' in cell_str:
-                            headers['specification'] = col_num
-                        elif '数量' in cell_str:
-                            headers['quantity'] = col_num
-                        elif '単位' in cell_str:
-                            headers['unit'] = col_num
-                        elif '単価' in cell_str and '原価' not in cell_str:
-                            headers['unit_price'] = col_num
-                        elif '原価' in cell_str or 'コスト' in cell_str:
-                            headers['cost_price'] = col_num
+            for row in ws.iter_rows(min_row=1, max_row=300, values_only=False):
+                row_values = [cell.value for cell in row]
 
-                # データ行を読み込み
-                for row_num, row in enumerate(detail_sheet.iter_rows(min_row=header_row + 1, max_row=200), start=1):
-                    item = {}
-                    has_data = False
+                # 空行スキップ
+                if not any(row_values):
+                    continue
 
-                    for key, col_num in headers.items():
-                        cell = detail_sheet.cell(row=header_row + row_num, column=col_num)
-                        if cell.value is not None:
-                            has_data = True
-                            if key in ['quantity', 'unit_price', 'cost_price']:
-                                try:
-                                    item[key] = float(cell.value)
-                                except (ValueError, TypeError):
-                                    item[key] = 0
-                            else:
-                                item[key] = str(cell.value).strip()
+                first_val = str(row[0].value).strip() if row[0].value else ""
 
-                    if has_data and item.get('description'):
-                        item.setdefault('category', '')
-                        item.setdefault('specification', '')
-                        item.setdefault('quantity', 1)
-                        item.setdefault('unit', '式')
-                        item.setdefault('unit_price', 0)
-                        item.setdefault('cost_price', 0)
-                        result["items"].append(item)
+                # ヘッダー行・スキップ行
+                if first_val in ['名称', '名　称', '品名', '項目', 'No.', 'NO.', '番号']:
+                    continue
+                if any(skip in first_val for skip in skip_keywords):
+                    continue
+                if not first_val:
+                    continue
 
-        # 条件書シートの解析
-        condition_sheet = None
-        for name in sheet_names:
-            if '条件' in name or 'condition' in name.lower():
-                condition_sheet = wb[name]
-                break
+                # 明細行として解析
+                try:
+                    name = first_val
+                    spec = ""
+                    quantity = 0
+                    unit = "式"
+                    unit_price = 0
+                    cost_price = 0
+                    amount = 0
 
-        if condition_sheet:
-            for row in condition_sheet.iter_rows(min_row=2, max_row=50, max_col=5):
-                category = row[0].value if row[0].value else ""
-                content = row[1].value if len(row) > 1 and row[1].value else ""
+                    # 仕様（2列目）
+                    if len(row) > 1 and row[1].value:
+                        spec = str(row[1].value).strip()
+
+                    # 数量（3列目）
+                    if len(row) > 2 and row[2].value:
+                        try:
+                            quantity = float(row[2].value)
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 単位（4列目）
+                    if len(row) > 3 and row[3].value:
+                        unit_val = str(row[3].value).strip()
+                        if any(u in unit_val for u in unit_keywords):
+                            unit = unit_val
+
+                    # 単価（5列目）
+                    if len(row) > 4 and row[4].value:
+                        try:
+                            unit_price = float(row[4].value)
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 金額（6列目）
+                    if len(row) > 5 and row[5].value:
+                        try:
+                            amount = float(row[5].value)
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 原価を探す（7列目以降）
+                    for i in range(6, min(len(row), 10)):
+                        if row[i].value:
+                            try:
+                                val = float(row[i].value)
+                                if val > 0 and val != amount and val != unit_price:
+                                    cost_price = val
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+
+                    # 有効なデータのみ追加
+                    if name and (quantity > 0 or amount > 0 or unit_price > 0):
+                        # 金額がなければ計算
+                        if amount == 0 and quantity > 0 and unit_price > 0:
+                            amount = quantity * unit_price
+
+                        result["items"].append({
+                            "category": "",
+                            "description": name,
+                            "specification": spec,
+                            "quantity": quantity if quantity > 0 else 1,
+                            "unit": unit,
+                            "unit_price": unit_price,
+                            "cost_price": cost_price,
+                            "amount": amount
+                        })
+
+                except Exception as e:
+                    print(f"明細行パースエラー: {e}")
+                    continue
+
+        # ============ 3. 条件書の解析 ============
+        for sheet_name in sheet_names:
+            if '条件' not in sheet_name:
+                continue
+
+            ws = wb[sheet_name]
+
+            for row in ws.iter_rows(min_row=2, max_row=100, max_col=5):
+                category = str(row[0].value).strip() if row[0].value else ""
+                content = str(row[1].value).strip() if len(row) > 1 and row[1].value else ""
+
                 if category or content:
                     result["conditions"].append({
-                        "category": str(category).strip(),
-                        "content": str(content).strip()
+                        "category": category,
+                        "content": content
                     })
 
-        # 確認書シートの解析
-        confirm_sheet = None
-        for name in sheet_names:
-            if '確認' in name or '負担' in name or 'confirm' in name.lower():
-                confirm_sheet = wb[name]
-                break
+        # ============ 4. 確認書（負担区分）の解析 ============
+        for sheet_name in sheet_names:
+            if '確認' not in sheet_name and '負担' not in sheet_name:
+                continue
 
-        if confirm_sheet:
-            for row in confirm_sheet.iter_rows(min_row=2, max_row=30, max_col=5):
-                item_name = row[0].value if row[0].value else ""
-                if item_name and str(item_name).strip():
-                    confirm_item = {
-                        "item": str(item_name).strip(),
+            ws = wb[sheet_name]
+
+            for row in ws.iter_rows(min_row=2, max_row=50, max_col=5):
+                item_name = str(row[0].value).strip() if row[0].value else ""
+
+                if item_name and item_name not in ['項目', '名称']:
+                    result["confirmation"]["items"].append({
+                        "item": item_name,
                         "client": bool(row[1].value) if len(row) > 1 else False,
                         "company": bool(row[2].value) if len(row) > 2 else False,
-                        "paid_supply": bool(row[3].value) if len(row) > 3 else False,
-                    }
-                    result["confirmation"]["items"].append(confirm_item)
+                        "paid_supply": bool(row[3].value) if len(row) > 3 else False
+                    })
 
         wb.close()
-        return result
+
+        # 成功レスポンス
+        return {
+            "success": True,
+            "cover": result["cover"],
+            "items": result["items"],
+            "conditions": result["conditions"],
+            "confirmation": result["confirmation"],
+            "items_count": len(result["items"]),
+            "conditions_count": len(result["conditions"]),
+            "message": f"Excelを読み込みました（明細{len(result['items'])}件、条件{len(result['conditions'])}件）"
+        }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Excelファイルの解析に失敗しました: {str(e)}")

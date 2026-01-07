@@ -129,6 +129,12 @@ export default function QuoteCreate() {
     const file = e.target.files[0]
     if (!file) return
 
+    // ファイル形式チェック
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      alert('Excel形式(.xlsx, .xls)のファイルを選択してください')
+      return
+    }
+
     const formData = new FormData()
     formData.append('file', file)
 
@@ -138,35 +144,67 @@ export default function QuoteCreate() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 
-      if (response.data) {
+      const data = response.data
+      console.log('Excel import response:', data)
+
+      if (data && data.success) {
         // 表紙データ
-        if (response.data.cover) {
-          setCoverData(prev => ({ ...prev, ...response.data.cover }))
+        if (data.cover) {
+          setCoverData(prev => ({
+            ...prev,
+            project_name: data.cover.project_name || prev.project_name,
+            site_name: data.cover.site_name || prev.site_name,
+            site_address: data.cover.site_address || prev.site_address,
+            quote_date: data.cover.quote_date || prev.quote_date,
+          }))
         }
         // 内訳データ
-        if (response.data.items && response.data.items.length > 0) {
-          setItems(response.data.items.map((item, idx) => ({ ...item, id: idx + 1 })))
+        if (data.items && data.items.length > 0) {
+          setItems(data.items.map((item, idx) => ({
+            id: idx + 1,
+            category: item.category || '',
+            description: item.description || item.name || '',
+            specification: item.specification || item.spec || '',
+            quantity: item.quantity || 1,
+            unit: item.unit || '式',
+            unit_price: item.unit_price || 0,
+            cost_price: item.cost_price || 0,
+          })))
         }
         // 条件書データ
-        if (response.data.conditions && response.data.conditions.length > 0) {
-          setConditions(response.data.conditions.map((c, idx) => ({ ...c, id: idx + 1 })))
+        if (data.conditions && data.conditions.length > 0) {
+          setConditions(data.conditions.map((c, idx) => ({
+            id: idx + 1,
+            category: c.category || '',
+            content: c.content || '',
+          })))
         }
         // 確認書データ
-        if (response.data.confirmation) {
-          if (response.data.confirmation.items) {
-            setConfirmationItems(response.data.confirmation.items.map((c, idx) => ({ ...c, id: idx + 1 })))
-          }
-          if (response.data.confirmation.special_notes) {
-            setSpecialNotes(response.data.confirmation.special_notes)
-          }
+        if (data.confirmation && data.confirmation.items && data.confirmation.items.length > 0) {
+          setConfirmationItems(data.confirmation.items.map((c, idx) => ({
+            id: idx + 1,
+            item: c.item || '',
+            client: c.client || false,
+            company: c.company || false,
+            paid_supply: c.paid_supply || false,
+          })))
         }
-        alert('Excelファイルを読み込みました')
+        if (data.confirmation && data.confirmation.special_notes) {
+          setSpecialNotes(data.confirmation.special_notes)
+        }
+
+        alert(data.message || 'Excelファイルを読み込みました')
+      } else {
+        alert('Excelファイルの読み込みに失敗しました')
       }
     } catch (error) {
       console.error('Excel import error:', error)
-      alert('Excelファイルの読み込みに失敗しました')
+      const errorMsg = error.response?.data?.detail || 'Excelファイルの読み込みに失敗しました'
+      alert(errorMsg)
     } finally {
       setLoading(false)
+      // ファイル入力をリセット
+      e.target.value = ''
     }
   }
 
