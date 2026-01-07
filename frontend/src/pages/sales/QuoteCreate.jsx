@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
 import api from '../../services/api'
 
 // 予算種別（1.0と同じ）
@@ -11,6 +13,9 @@ const BUDGET_TYPES = [
   { value: '経費', label: '経費', color: '#6b7280' },
   { value: 'その他', label: '他', color: '#94a3b8' },
 ]
+
+// 集計から除外する項目名（小計行など）
+const EXCLUDE_FROM_TOTAL = ['直接工事費', '小計', '合計', '計']
 
 // 空の予算明細を作成
 const createEmptyBudget = () => ({
@@ -30,7 +35,8 @@ export default function QuoteCreate() {
   const [loading, setLoading] = useState(false)
   const [clients, setClients] = useState([])
   const [activeTab, setActiveTab] = useState('cover')
-  const [expandedRows, setExpandedRows] = useState({}) // 展開行の管理
+  const [expandedRows, setExpandedRows] = useState({})
+  const [showPdfOptions, setShowPdfOptions] = useState(false)
 
   // 表紙データ
   const [coverData, setCoverData] = useState({
@@ -54,7 +60,7 @@ export default function QuoteCreate() {
       unit: '式',
       unit_price: 0,
       cost_price: 0,
-      budgets: [createEmptyBudget()], // 予算明細
+      budgets: [createEmptyBudget()],
     }
   ])
 
@@ -87,6 +93,11 @@ export default function QuoteCreate() {
       console.error('Error fetching clients:', error)
       setClients([])
     }
+  }
+
+  // 集計対象かどうか判定
+  const isExcludedFromTotal = (description) => {
+    return EXCLUDE_FROM_TOTAL.some(keyword => description.includes(keyword))
   }
 
   // 行の展開/折りたたみ
@@ -148,7 +159,6 @@ export default function QuoteCreate() {
         const newBudgets = [...item.budgets]
         newBudgets[budgetIndex] = { ...newBudgets[budgetIndex], [field]: value }
 
-        // 金額自動計算
         if (field === 'quantity' || field === 'unitPrice') {
           const qty = field === 'quantity' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].quantity) || 0
           const price = field === 'unitPrice' ? parseFloat(value) || 0 : parseFloat(newBudgets[budgetIndex].unitPrice) || 0
@@ -215,10 +225,11 @@ export default function QuoteCreate() {
     ))
   }
 
-  // 計算
+  // 計算（直接工事費などは除外）
   const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0)
-    const costTotal = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost_price) || 0), 0)
+    const filteredItems = items.filter(item => !isExcludedFromTotal(item.description))
+    const subtotal = filteredItems.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0)
+    const costTotal = filteredItems.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost_price) || 0), 0)
     const taxAmount = Math.floor(subtotal * 0.1)
     const totalAmount = subtotal + taxAmount
     const profit = subtotal - costTotal
@@ -232,6 +243,123 @@ export default function QuoteCreate() {
 
   const formatNumber = (num) => {
     return new Intl.NumberFormat('ja-JP').format(num || 0)
+  }
+
+  // PDF出力
+  const handlePdfExport = (type) => {
+    const doc = new jsPDF('p', 'mm', 'a4')
+    const { subtotal, taxAmount, totalAmount } = calculateTotals()
+
+    // 日本語フォント対応のため、基本的なスタイルを設定
+    doc.setFont('helvetica')
+
+    const addHeader = () => {
+      doc.setFontSize(18)
+      doc.text('ESTIMATE / MITSUMORI', 105, 20, { align: 'center' })
+      doc.setFontSize(10)
+      doc.text(`Project: ${coverData.project_name || 'N/A'}`, 20, 35)
+      doc.text(`Site: ${coverData.site_name || 'N/A'}`, 20, 42)
+      doc.text(`Date: ${coverData.quote_date || 'N/A'}`, 150, 35)
+    }
+
+    if (type === 'full' || type === 'breakdown') {
+      addHeader()
+
+      // 内訳テーブル
+      const tableData = items.map(item => [
+        item.category || '',
+        item.description || '',
+        item.specification || '',
+        item.quantity || '',
+        item.unit || '',
+        formatNumber(item.unit_price || 0),
+        formatNumber((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0))
+      ])
+
+      doc.autoTable({
+        startY: 50,
+        head: [['Category', 'Item', 'Spec', 'Qty', 'Unit', 'Price', 'Amount']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 40 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 15, halign: 'right' },
+          4: { cellWidth: 15, halign: 'center' },
+          5: { cellWidth: 25, halign: 'right' },
+          6: { cellWidth: 30, halign: 'right' },
+        },
+      })
+
+      // 合計
+      const finalY = doc.lastAutoTable.finalY + 10
+      doc.setFontSize(10)
+      doc.text(`Subtotal: ${formatCurrency(subtotal)}`, 150, finalY, { align: 'right' })
+      doc.text(`Tax (10%): ${formatCurrency(taxAmount)}`, 150, finalY + 7, { align: 'right' })
+      doc.setFontSize(12)
+      doc.text(`Total: ${formatCurrency(totalAmount)}`, 150, finalY + 16, { align: 'right' })
+    }
+
+    if (type === 'full' || type === 'budget') {
+      if (type === 'full') {
+        doc.addPage()
+      }
+      if (type === 'budget') {
+        addHeader()
+      }
+
+      doc.setFontSize(14)
+      doc.text('Budget Details / Yosan Meisai', 20, type === 'budget' ? 50 : 20)
+
+      let yPos = type === 'budget' ? 60 : 30
+
+      items.forEach((item, idx) => {
+        if (item.budgets && item.budgets.length > 0) {
+          // 項目名
+          doc.setFontSize(10)
+          doc.text(`${idx + 1}. ${item.description || 'Item ' + (idx + 1)}`, 20, yPos)
+          yPos += 5
+
+          const budgetData = item.budgets.map(b => [
+            b.type || '',
+            b.spec || '',
+            b.quantity || '',
+            b.unit || '',
+            formatNumber(b.unitPrice || 0),
+            formatNumber(b.estimatePrice || 0),
+            formatNumber(b.amount || 0),
+            formatNumber(b.estimateAmount || 0)
+          ])
+
+          doc.autoTable({
+            startY: yPos,
+            head: [['Type', 'Spec', 'Qty', 'Unit', 'Budget Price', 'Est Price', 'Budget Amt', 'Est Amt']],
+            body: budgetData,
+            theme: 'grid',
+            headStyles: { fillColor: [100, 116, 139], fontSize: 7 },
+            bodyStyles: { fontSize: 7 },
+            margin: { left: 25 },
+            tableWidth: 160,
+          })
+
+          yPos = doc.lastAutoTable.finalY + 10
+
+          // ページオーバーチェック
+          if (yPos > 270) {
+            doc.addPage()
+            yPos = 20
+          }
+        }
+      })
+    }
+
+    // ファイル名
+    const fileName = `estimate_${coverData.project_name || 'quote'}_${type}_${new Date().toISOString().split('T')[0]}.pdf`
+    doc.save(fileName)
+    setShowPdfOptions(false)
   }
 
   // Excel取込
@@ -371,7 +499,6 @@ export default function QuoteCreate() {
     { id: 'confirmation', label: '確認書', icon: '✅' },
   ]
 
-  // 予算種別のカラー取得
   const getBudgetTypeColor = (type) => {
     const found = BUDGET_TYPES.find(t => t.value === type)
     return found ? found.color : '#6b7280'
@@ -398,16 +525,54 @@ export default function QuoteCreate() {
             </div>
           </div>
 
-          <label className="glass-button glass-blue rounded-xl px-6 py-3 text-white font-semibold cursor-pointer hover:bg-blue-500/40 flex items-center gap-2">
-            <span className="text-xl">📥</span>
-            <span>Excel取込</span>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleExcelImport}
-              className="hidden"
-            />
-          </label>
+          <div className="flex items-center gap-3">
+            {/* PDF出力ボタン */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPdfOptions(!showPdfOptions)}
+                className="glass-button glass-purple rounded-xl px-5 py-3 text-white font-semibold flex items-center gap-2"
+              >
+                <span className="text-lg">📄</span>
+                <span>PDF出力</span>
+              </button>
+
+              {/* PDF出力オプション */}
+              {showPdfOptions && (
+                <div className="absolute right-0 top-full mt-2 bg-slate-800 border border-white/20 rounded-xl shadow-2xl overflow-hidden z-50 min-w-[180px]">
+                  <button
+                    onClick={() => handlePdfExport('full')}
+                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-2"
+                  >
+                    <span>📑</span> 全体（見積書全体）
+                  </button>
+                  <button
+                    onClick={() => handlePdfExport('budget')}
+                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-2"
+                  >
+                    <span>💰</span> 予算のみ
+                  </button>
+                  <button
+                    onClick={() => handlePdfExport('breakdown')}
+                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-2"
+                  >
+                    <span>📋</span> 内訳のみ
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Excel取込ボタン */}
+            <label className="glass-button glass-blue rounded-xl px-5 py-3 text-white font-semibold cursor-pointer hover:bg-blue-500/40 flex items-center gap-2">
+              <span className="text-lg">📥</span>
+              <span>Excel取込</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleExcelImport}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
 
         {/* 金額サマリー */}
@@ -566,19 +731,19 @@ export default function QuoteCreate() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px]">
+                <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="border-b border-white/10">
                       <th className="w-8"></th>
-                      <th className="text-left text-gray-400 text-sm py-2 px-2 w-24">分類</th>
-                      <th className="text-left text-gray-400 text-sm py-2 px-2">項目名</th>
-                      <th className="text-left text-gray-400 text-sm py-2 px-2 w-32">仕様</th>
-                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-20">数量</th>
-                      <th className="text-center text-gray-400 text-sm py-2 px-2 w-16">単位</th>
-                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-28">単価</th>
-                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-28">原価</th>
-                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-32">金額</th>
-                      <th className="w-12"></th>
+                      <th className="text-left text-gray-400 text-sm py-2 px-2 w-20">分類</th>
+                      <th className="text-left text-gray-400 text-sm py-2 px-2 w-36">項目名</th>
+                      <th className="text-left text-gray-400 text-sm py-2 px-2 w-28">仕様</th>
+                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-16">数量</th>
+                      <th className="text-center text-gray-400 text-sm py-2 px-2 w-14">単位</th>
+                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-24">単価</th>
+                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-24">原価</th>
+                      <th className="text-right text-gray-400 text-sm py-2 px-2 w-28">金額</th>
+                      <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -587,7 +752,7 @@ export default function QuoteCreate() {
                         {/* 親行（クリックで展開） */}
                         <tr
                           key={item.id}
-                          className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${expandedRows[index] ? 'bg-white/10' : ''}`}
+                          className={`border-b border-white/5 cursor-pointer hover:bg-white/5 ${expandedRows[index] ? 'bg-white/10' : ''} ${isExcludedFromTotal(item.description) ? 'opacity-60' : ''}`}
                           onClick={() => toggleExpand(index)}
                         >
                           <td className="py-2 px-2 text-center">
@@ -600,7 +765,7 @@ export default function QuoteCreate() {
                               type="text"
                               value={item.category}
                               onChange={(e) => handleItemChange(item.id, 'category', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-white text-sm"
                               placeholder="分類"
                             />
                           </td>
@@ -609,7 +774,7 @@ export default function QuoteCreate() {
                               type="text"
                               value={item.description}
                               onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-white text-sm"
                               placeholder="項目名"
                             />
                           </td>
@@ -618,7 +783,7 @@ export default function QuoteCreate() {
                               type="text"
                               value={item.specification}
                               onChange={(e) => handleItemChange(item.id, 'specification', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-white text-sm"
                               placeholder="仕様"
                             />
                           </td>
@@ -627,14 +792,14 @@ export default function QuoteCreate() {
                               type="number"
                               value={item.quantity}
                               onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-white text-sm text-right"
                             />
                           </td>
                           <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
                             <select
                               value={item.unit}
                               onChange={(e) => handleItemChange(item.id, 'unit', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-1 py-2 text-white text-sm"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-1 py-1.5 text-white text-sm"
                             >
                               <option value="式">式</option>
                               <option value="個">個</option>
@@ -653,7 +818,7 @@ export default function QuoteCreate() {
                               type="number"
                               value={item.unit_price}
                               onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-white text-sm text-right"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-white text-sm text-right"
                             />
                           </td>
                           <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
@@ -661,10 +826,10 @@ export default function QuoteCreate() {
                               type="number"
                               value={item.cost_price}
                               onChange={(e) => handleItemChange(item.id, 'cost_price', e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-2 text-gray-300 text-sm text-right"
+                              className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-gray-300 text-sm text-right"
                             />
                           </td>
-                          <td className="py-2 px-2 text-right text-white font-medium">
+                          <td className="py-2 px-2 text-right text-white font-medium text-sm">
                             {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0))}
                           </td>
                           <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
@@ -681,7 +846,7 @@ export default function QuoteCreate() {
                         {expandedRows[index] && (
                           <tr key={`budget-${item.id}`}>
                             <td colSpan={10} className="bg-white/5 px-4 py-4">
-                              <div className="ml-8">
+                              <div className="ml-6">
                                 {/* 予算サマリー */}
                                 <div className="flex items-center gap-6 mb-4 pb-3 border-b border-white/10">
                                   <div>
@@ -710,15 +875,15 @@ export default function QuoteCreate() {
                                 <table className="w-full">
                                   <thead>
                                     <tr className="border-b border-white/10">
-                                      <th className="text-left text-gray-400 text-xs py-2 px-2 w-24">種別</th>
+                                      <th className="text-left text-gray-400 text-xs py-2 px-2 w-20">種別</th>
                                       <th className="text-left text-gray-400 text-xs py-2 px-2">仕様・内容</th>
-                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-16">数量</th>
-                                      <th className="text-center text-gray-400 text-xs py-2 px-2 w-14">単位</th>
-                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">予算単価</th>
-                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">見積単価</th>
-                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">予算金額</th>
-                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-24">見積金額</th>
-                                      <th className="w-10"></th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-14">数量</th>
+                                      <th className="text-center text-gray-400 text-xs py-2 px-2 w-12">単位</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-20">予算単価</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-20">見積単価</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-20">予算金額</th>
+                                      <th className="text-right text-gray-400 text-xs py-2 px-2 w-20">見積金額</th>
+                                      <th className="w-8"></th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -980,6 +1145,14 @@ export default function QuoteCreate() {
           </div>
         </div>
       </div>
+
+      {/* PDF出力オプションの背景クリックで閉じる */}
+      {showPdfOptions && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowPdfOptions(false)}
+        />
+      )}
     </div>
   )
 }
