@@ -1,135 +1,250 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Glassmorphism button base */
-.glass-button {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
-}
+:root {
+  /* 高級感のあるダークテーマ基本色 */
+  --bg: #0a0a0a;
+  --bg-light: #141414;
+  --card: #141414;
+  --card-hover: #1e1e1e;
+  --text: #ffffff;
+  --text-light: #888888;
+  --border: #2a2a2a;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
-.glass-button:hover {
-  background: rgba(255, 255, 255, 0.15);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
-  animation: jelly 0.3s ease;
-}
+  /* テーマカラー（動的に変更される） */
+  --primary: #ff6b35;
+  --primary-dark: #e55a25;
+  --primary-light: #fff5ee;
 
-/* Jelly animation class */
-.animate-jelly {
-  animation: jelly 0.5s ease;
+  /* 固定カラー */
+  --success: #4CAF7D;
+  --warning: #D4924B;
+  --danger: #dc3545;
 }
 
-@keyframes jelly {
-  0%, 100% {
-    transform: scale(1, 1);
-  }
-  25% {
-    transform: scale(0.98, 1.02);
-  }
-  50% {
-    transform: scale(1.02, 0.98);
-  }
-  75% {
-    transform: scale(0.99, 1.01);
-  }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+html, body, #root {
+  height: 100%;
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.8;
-  }
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  /* デフォルトは海のグラデーション（スプラッシュ時のチラつき防止） */
+  background: linear-gradient(180deg, rgba(0, 210, 220, 0.85) 0%, rgba(0, 190, 200, 0.8) 30%, rgba(0, 170, 185, 0.75) 60%, rgba(0, 155, 170, 0.8) 100%);
+  color: var(--text);
+  overflow-x: hidden;
 }
 
-/* Color variants */
-.glass-orange {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.4), rgba(234, 88, 12, 0.3));
-  border-color: rgba(249, 115, 22, 0.5);
-}
-.glass-orange:hover {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.5), rgba(234, 88, 12, 0.4));
-  box-shadow:
-    0 16px 48px rgba(249, 115, 22, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+/* メインコンテナ - インラインスタイルでテーマ背景を適用 */
+.min-h-screen {
+  /* background is set via inline style for theme support */
+  transition: background-color 0.3s ease;
 }
 
-.glass-blue {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(37, 99, 235, 0.3));
-  border-color: rgba(59, 130, 246, 0.5);
-}
-.glass-blue:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.5), rgba(37, 99, 235, 0.4));
-  box-shadow:
-    0 16px 48px rgba(59, 130, 246, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+/* モダンカードスタイル */
+.modern-card {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
 }
 
-.glass-green {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.4), rgba(22, 163, 74, 0.3));
-  border-color: rgba(34, 197, 94, 0.5);
-}
-.glass-green:hover {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.5), rgba(22, 163, 74, 0.4));
-  box-shadow:
-    0 16px 48px rgba(34, 197, 94, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+.modern-card:active {
+  transform: scale(0.98);
 }
 
-.glass-purple {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(139, 92, 246, 0.3));
-  border-color: rgba(168, 85, 247, 0.5);
-}
-.glass-purple:hover {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(139, 92, 246, 0.4));
-  box-shadow:
-    0 16px 48px rgba(168, 85, 247, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+.modern-card:hover {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+  background: var(--card-hover);
 }
 
-.glass-gray {
-  background: linear-gradient(135deg, rgba(100, 116, 139, 0.4), rgba(71, 85, 105, 0.3));
-  border-color: rgba(100, 116, 139, 0.5);
-}
-.glass-gray:hover {
-  background: linear-gradient(135deg, rgba(100, 116, 139, 0.5), rgba(71, 85, 105, 0.4));
-  box-shadow:
-    0 16px 48px rgba(100, 116, 139, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+/* スクロールバー */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
 }
 
-/* Background gradient */
-.bg-navy-gradient {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Logo animation */
-.logo-float {
-  animation: float 3s ease-in-out infinite;
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
-/* Decorative orbs */
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  animation: pulse-glow 4s ease-in-out infinite;
-  pointer-events: none;
+/* スクロールバー非表示 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe Area対応 */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+/* モーダル用スクロール改善 */
+.modal-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* 入力フィールド */
+input, select, textarea {
+  font-family: inherit;
+  font-size: 16px;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ボタン */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* リンク */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease;
+}
+
+/* セーフエリア対応 */
+.safe-area-bottom {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.safe-area-top {
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+
+/* ダークテーマ用カレンダー */
+.react-datepicker {
+  background-color: var(--bg-light) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  font-family: 'Noto Sans JP', sans-serif !important;
+}
+
+.react-datepicker__header {
+  background-color: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 12px 12px 0 0 !important;
+  padding-top: 12px !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker-time__header {
+  color: var(--text) !important;
+}
+
+.react-datepicker__day {
+  color: var(--text) !important;
+  border-radius: 8px !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: var(--card-hover) !important;
+  border-radius: 8px !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: var(--primary) !important;
+  color: white !important;
+}
+
+.react-datepicker__day--today {
+  background-color: var(--card-hover) !important;
+  font-weight: bold !important;
+}
+
+.react-datepicker__day--outside-month {
+  color: var(--text-light) !important;
+  opacity: 0.5;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: var(--text) !important;
+}
+
+.react-datepicker__year-dropdown,
+.react-datepicker__month-dropdown {
+  background-color: var(--bg-light) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.react-datepicker__year-option,
+.react-datepicker__month-option {
+  color: var(--text) !important;
+}
+
+.react-datepicker__year-option:hover,
+.react-datepicker__month-option:hover {
+  background-color: var(--card-hover) !important;
+}
+
+.react-datepicker__triangle {
+  display: none !important;
+}
+
+.react-datepicker-popper {
+  z-index: 300 !important;
 }

@@ -1,208 +1,264 @@
-import { BrowserRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import Sales from './pages/Sales'
-import Construction from './pages/Construction'
-import Office from './pages/Office'
-import Management from './pages/Management'
-import Settings from './pages/Settings'
+import { useEffect, useState } from 'react'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import BottomNav from './components/BottomNav'
+import AIHelpButton from './components/AIHelpButton'
+import SplashScreen from './components/SplashScreen'
+import { useThemeStore, useAuthStore, backgroundStyles } from './store'
+import LoginPage from './pages/LoginPage'
 
-// Sales sub-pages
-import QuoteList from './pages/sales/QuoteList'
-import QuoteCreate from './pages/sales/QuoteCreate'
-import Schedule from './pages/sales/Schedule'
-import BusinessCards from './pages/sales/BusinessCards'
+// Pages
+import HomePage from './pages/HomePage'
+import SubMenuPage from './pages/SubMenuPage'
+import DantoriPage from './pages/DantoriPage'
+import SbasePage, { ProjectDetailPage } from './pages/SbasePage'
+import ScanPage, { ScanResultPage } from './pages/ScanPage'
+import WeatherPage from './pages/WeatherPage'
+import { FeedbackPage, HelpPage } from './pages/FeedbackPage'
+import ApprovePage from './pages/ApprovePage'
+import NotifyPage from './pages/NotifyPage'
+import EmergencyPage from './pages/EmergencyPage'
+import ChecklistPage from './pages/ChecklistPage'
+import CarPage from './pages/CarPage'
+import EquipmentPage from './pages/EquipmentPage'
+import PriceMasterPage from './pages/PriceMasterPage'
 
-// Construction sub-pages
-import DailyReport from './pages/construction/DailyReport'
-import SiteList from './pages/construction/SiteList'
-import KYRecord from './pages/construction/KYRecord'
-import Photos from './pages/construction/Photos'
-import Inventory from './pages/construction/Inventory'
+// 新しいページ
+import ExpensePage from './pages/ExpensePage'
+import InvoicePage from './pages/InvoicePage'
+import KYPage from './pages/KYPage'
+import InventoryPage from './pages/InventoryPage'
+import SchedulePage from './pages/SchedulePage'
+import AttendancePage from './pages/AttendancePage'
+import QRPage from './pages/QRPage'
+import SubcontractorPage from './pages/SubcontractorPage'
+import OrderPage from './pages/OrderPage'
+import TemplatePage from './pages/TemplatePage'
+import SearchPage from './pages/SearchPage'
+import CalendarPage from './pages/CalendarPage'
+import SitePage from './pages/SitePage'
 
-// Office sub-pages
-import Expenses from './pages/office/Expenses'
-import ExpenseRequest from './pages/office/ExpenseRequest'
-import Income from './pages/office/Income'
-import LeaveRequest from './pages/office/LeaveRequest'
+// 追加ページ
+import ClientsPage from './pages/ClientsPage'
+import SalesSchedulePage from './pages/SalesSchedulePage'
+import DailyReportPage from './pages/DailyReportPage'
+import DocumentsPage from './pages/DocumentsPage'
+import IncomePage from './pages/IncomePage'
+import ExpensePayPage from './pages/ExpensePayPage'
 
-// Management sub-pages
-import Dashboard from './pages/management/Dashboard'
-import MonthlyReport from './pages/management/MonthlyReport'
+// タスク17-24の新ページ
+import DrawingsPage from './pages/DrawingsPage'
+import PhotosPage from './pages/PhotosPage'
+import InspectionsPage from './pages/InspectionsPage'
+import SafetyPage from './pages/SafetyPage'
+import ChatPage, { ChatListPage } from './pages/ChatPage'
+import SettingsPage, { UsersPage, IntegrationsPage, ExportPage, LineWorksPage, LineWorksSettingsPage, CompanySettingsPage, NotificationsSettingsPage, PrivacySettingsPage, AccountSettingsPage, HelpSettingsPage, AboutSettingsPage } from './pages/SettingsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
+import BusinessCardsPage from './pages/BusinessCardsPage'
+import QuotesPage from './pages/QuotesPage'
+import QuoteCreatePage from './pages/QuoteCreatePage'
+import QuoteImportPage from './pages/QuoteImportPage'
+import ClientRankingPage from './pages/ClientRankingPage'
+import WorkersPage from './pages/WorkersPage'
+import EmployeeMasterPage from './pages/EmployeeMasterPage'
+import SitesPage from './pages/SitesPage'
+import ExpenseNewPage from './pages/ExpenseNewPage'
+import MaterialSlipPage from './pages/MaterialSlipPage'
+import MonthlyReportPage from './pages/MonthlyReportPage'
+import OCRPage from './pages/OCRPage'
+import HotelSearch from './components/HotelSearch'
+import ProjectDetailPage2 from './pages/ProjectDetailPage'
 
-// Settings sub-pages
-import Employees from './pages/settings/Employees'
-import Clients from './pages/settings/Clients'
+// Phase 1: 経理・事務機能
+import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
+import InvoicesPage from './pages/InvoicesPage'
+import TransactionsPage from './pages/TransactionsPage'
+import PaymentsPage from './pages/PaymentsPage'
 
-// Protected Route wrapper
+// Phase 2: 効率化機能
+import LeavesPage from './pages/LeavesPage'
+import ExportsPage from './pages/ExportsPage'
+import PerformancePage from './pages/PerformancePage'
+
+// PD材料管理
+import PDMaterialsPage, { PDInventoryPage, PDUsagePage, PDPlansPage } from './pages/PDMaterialsPage'
+
+// 認証が必要なルートを保護するコンポーネント
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, _hasHydrated } = useAuthStore()
+  const location = useLocation()
 
-  if (loading) {
+  // ハイドレーション完了まで待機（ローディング表示）
+  if (!_hasHydrated) {
     return (
-      <div className="min-h-screen bg-navy-gradient flex items-center justify-center">
-        <div className="text-white text-xl">読み込み中...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
 
   return children
 }
 
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+export default function App() {
+  const { initTheme, backgroundId } = useThemeStore()
+  const { isAuthenticated, _hasHydrated } = useAuthStore()
+  const [showSplash, setShowSplash] = useState(true)
+  const currentBg = backgroundStyles.find(b => b.id === backgroundId) || backgroundStyles[0]
+  const location = useLocation()
 
-      <Route path="/" element={
-        <ProtectedRoute><Home /></ProtectedRoute>
-      } />
+  // ログインページかどうか
+  const isLoginPage = location.pathname === '/login'
 
-      {/* Main menu pages */}
-      <Route path="/sales" element={
-        <ProtectedRoute><Sales /></ProtectedRoute>
-      } />
-      <Route path="/construction" element={
-        <ProtectedRoute><Construction /></ProtectedRoute>
-      } />
-      <Route path="/office" element={
-        <ProtectedRoute><Office /></ProtectedRoute>
-      } />
-      <Route path="/management" element={
-        <ProtectedRoute><Management /></ProtectedRoute>
-      } />
-      <Route path="/settings" element={
-        <ProtectedRoute><Settings /></ProtectedRoute>
-      } />
+  // アプリ起動時にテーマを初期化（一度だけ実行）
+  useEffect(() => {
+    initTheme()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-      {/* Sales sub-pages */}
-      <Route path="/sales/quotes" element={
-        <ProtectedRoute><QuoteList /></ProtectedRoute>
-      } />
-      <Route path="/sales/quote-create" element={
-        <ProtectedRoute><QuoteCreate /></ProtectedRoute>
-      } />
-      <Route path="/sales/schedule" element={
-        <ProtectedRoute><Schedule /></ProtectedRoute>
-      } />
-      <Route path="/sales/cards" element={
-        <ProtectedRoute><BusinessCards /></ProtectedRoute>
-      } />
-      <Route path="/sales/*" element={
-        <ProtectedRoute><PlaceholderPage title="営業" backPath="/sales" /></ProtectedRoute>
-      } />
+  // スプラッシュスクリーンを2秒後に非表示
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
 
-      {/* Construction sub-pages */}
-      <Route path="/construction/daily-report" element={
-        <ProtectedRoute><DailyReport /></ProtectedRoute>
-      } />
-      <Route path="/construction/sites" element={
-        <ProtectedRoute><SiteList /></ProtectedRoute>
-      } />
-      <Route path="/construction/ky" element={
-        <ProtectedRoute><KYRecord /></ProtectedRoute>
-      } />
-      <Route path="/construction/photos" element={
-        <ProtectedRoute><Photos /></ProtectedRoute>
-      } />
-      <Route path="/construction/inventory" element={
-        <ProtectedRoute><Inventory /></ProtectedRoute>
-      } />
-      <Route path="/construction/*" element={
-        <ProtectedRoute><PlaceholderPage title="工事" backPath="/construction" /></ProtectedRoute>
-      } />
-
-      {/* Office sub-pages */}
-      <Route path="/office/expenses" element={
-        <ProtectedRoute><Expenses /></ProtectedRoute>
-      } />
-      <Route path="/office/expense-request" element={
-        <ProtectedRoute><ExpenseRequest /></ProtectedRoute>
-      } />
-      <Route path="/office/income" element={
-        <ProtectedRoute><Income /></ProtectedRoute>
-      } />
-      <Route path="/office/leave-request" element={
-        <ProtectedRoute><LeaveRequest /></ProtectedRoute>
-      } />
-      <Route path="/office/*" element={
-        <ProtectedRoute><PlaceholderPage title="事務" backPath="/office" /></ProtectedRoute>
-      } />
-
-      {/* Management sub-pages */}
-      <Route path="/management/dashboard" element={
-        <ProtectedRoute><Dashboard /></ProtectedRoute>
-      } />
-      <Route path="/management/monthly-report" element={
-        <ProtectedRoute><MonthlyReport /></ProtectedRoute>
-      } />
-      <Route path="/management/*" element={
-        <ProtectedRoute><PlaceholderPage title="経営" backPath="/management" /></ProtectedRoute>
-      } />
-
-      {/* Settings sub-pages */}
-      <Route path="/settings/employees" element={
-        <ProtectedRoute><Employees /></ProtectedRoute>
-      } />
-      <Route path="/settings/clients" element={
-        <ProtectedRoute><Clients /></ProtectedRoute>
-      } />
-      <Route path="/settings/*" element={
-        <ProtectedRoute><PlaceholderPage title="設定/マスタ" backPath="/settings" /></ProtectedRoute>
-      } />
-    </Routes>
-  )
-}
-
-function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
-  )
-}
-
-// Temporary placeholder for sub-pages
-function PlaceholderPage({ title, backPath = '/' }) {
-  const navigate = useNavigate()
+  // 背景スタイルを構築
+  const bgStyle = {
+    background: currentBg.bg,
+    ...(currentBg.bgStyle || {}),
+    color: 'var(--text)',
+  }
 
   return (
-    <div className="min-h-screen bg-navy-gradient relative overflow-hidden">
-      <div
-        className="orb"
-        style={{
-          width: '300px',
-          height: '300px',
-          background: 'rgba(59, 130, 246, 0.2)',
-          top: '-10%',
-          left: '-10%',
-          position: 'absolute',
-          borderRadius: '50%',
-          filter: 'blur(80px)',
-        }}
-      />
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🚧</div>
-          <h1 className="text-3xl font-bold text-white mb-2">準備中</h1>
-          <p className="text-gray-400 mb-6">この機能は現在開発中です</p>
-          <button
-            onClick={() => navigate(backPath)}
-            className="glass-button rounded-xl px-6 py-3 text-white hover:bg-white/20"
-          >
-            ← {title}に戻る
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen" style={bgStyle}>
+      {/* スプラッシュスクリーン（ログインページ以外で表示） */}
+      {!isLoginPage && <SplashScreen isVisible={showSplash} />}
+
+      <Routes>
+        {/* ログイン */}
+        <Route path="/login" element={
+          !_hasHydrated ? (
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+            </div>
+          ) : isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+        } />
+
+        {/* メイン（認証必須） */}
+        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+        <Route path="/menu/:category" element={<SubMenuPage />} />
+        <Route path="/dantori" element={<DantoriPage />} />
+        <Route path="/sbase" element={<SbasePage />} />
+        <Route path="/sbase/:id" element={<ProjectDetailPage />} />
+        <Route path="/ky" element={<KYPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
+
+        {/* 撮影ステーション */}
+        <Route path="/scan" element={<ScanPage />} />
+        <Route path="/scan-result" element={<ScanResultPage />} />
+
+        {/* 経理・事務 */}
+        <Route path="/quotes" element={<QuotesPage />} />
+        <Route path="/quotes/new" element={<QuoteCreatePage />} />
+        <Route path="/quotes/:id/edit" element={<QuoteCreatePage />} />
+        <Route path="/quotes/import" element={<QuoteImportPage />} />
+        <Route path="/projects/:id" element={<ProjectDetailPage2 />} />
+        <Route path="/invoice" element={<InvoicePage />} />
+        <Route path="/price-master" element={<PriceMasterPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/material-slip" element={<MaterialSlipPage />} />
+        <Route path="/expense" element={<ExpensePage />} />
+        <Route path="/expense/new" element={<ExpenseNewPage />} />
+        <Route path="/approve" element={<ApprovePage />} />
+
+        {/* 現場 */}
+        <Route path="/site/:id" element={<SitePage />} />
+        <Route path="/weather" element={<WeatherPage />} />
+        <Route path="/emergency" element={<EmergencyPage />} />
+        <Route path="/checklist" element={<ChecklistPage />} />
+        <Route path="/qr" element={<QRPage />} />
+
+        {/* 管理 */}
+        <Route path="/car" element={<CarPage />} />
+        <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/subcon" element={<SubcontractorPage />} />
+        <Route path="/order" element={<OrderPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+
+        {/* その他 */}
+        <Route path="/notify" element={<NotifyPage />} />
+        <Route path="/template" element={<TemplatePage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
+
+        {/* 追加機能 */}
+        <Route path="/clients" element={<ClientsPage />} />
+        <Route path="/clients/ranking" element={<ClientRankingPage />} />
+        <Route path="/workers" element={<WorkersPage />} />
+        <Route path="/ocr" element={<OCRPage />} />
+        <Route path="/sites" element={<SitesPage />} />
+        <Route path="/sales-schedule" element={<SalesSchedulePage />} />
+        <Route path="/daily-report" element={<DailyReportPage />} />
+        <Route path="/documents" element={<DocumentsPage />} />
+        <Route path="/income" element={<IncomePage />} />
+        <Route path="/expense-pay" element={<ExpensePayPage />} />
+
+        {/* タスク17-24: 新機能 */}
+        <Route path="/drawings" element={<DrawingsPage />} />
+        <Route path="/photos" element={<PhotosPage />} />
+        <Route path="/inspections" element={<InspectionsPage />} />
+        <Route path="/safety" element={<SafetyPage />} />
+        <Route path="/chat" element={<ChatListPage />} />
+        <Route path="/chat/:projectId" element={<ChatPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/users" element={<UsersPage />} />
+        <Route path="/settings/integrations" element={<IntegrationsPage />} />
+        <Route path="/settings/export" element={<ExportPage />} />
+        <Route path="/settings/lineworks" element={<LineWorksSettingsPage />} />
+        <Route path="/settings/company" element={<CompanySettingsPage />} />
+        <Route path="/settings/employees" element={<EmployeeMasterPage />} />
+        <Route path="/settings/notifications" element={<NotificationsSettingsPage />} />
+        <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
+        <Route path="/settings/account" element={<AccountSettingsPage />} />
+        <Route path="/settings/help" element={<HelpSettingsPage />} />
+        <Route path="/settings/about" element={<AboutSettingsPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/monthly-report" element={<MonthlyReportPage />} />
+        <Route path="/business-cards" element={<BusinessCardsPage />} />
+        <Route path="/hotel" element={<HotelSearch />} />
+
+        {/* Phase 1: 経理・事務機能 */}
+        <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+        <Route path="/invoices-issue" element={<InvoicesPage />} />
+        <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/payments" element={<PaymentsPage />} />
+
+        {/* Phase 2: 効率化機能 */}
+        <Route path="/leaves" element={<LeavesPage />} />
+        <Route path="/exports" element={<ExportsPage />} />
+        <Route path="/performance" element={<PerformancePage />} />
+
+        {/* PD材料管理 */}
+        <Route path="/pd-materials" element={<PDMaterialsPage />} />
+        <Route path="/pd-materials/inventory" element={<PDInventoryPage />} />
+        <Route path="/pd-materials/usage" element={<PDUsagePage />} />
+        <Route path="/pd-materials/plans" element={<PDPlansPage />} />
+      </Routes>
+
+      {/* ログインページ以外でナビゲーションを表示 */}
+      {isAuthenticated && !isLoginPage && (
+        <>
+          <BottomNav />
+          <AIHelpButton />
+        </>
+      )}
     </div>
   )
 }
-
-export default App
