@@ -28,7 +28,7 @@ export default function Employees() {
   const fetchEmployees = async () => {
     try {
       const response = await api.get('/employees/')
-      setEmployees(Array.isArray(response.data) ? response.data : [])
+      setEmployees(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching employees:', error)
       setEmployees([])

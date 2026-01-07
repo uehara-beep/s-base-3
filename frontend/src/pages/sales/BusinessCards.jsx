@@ -29,7 +29,7 @@ export default function BusinessCards() {
   const fetchCards = async () => {
     try {
       const response = await api.get('/business-cards/')
-      setCards(Array.isArray(response.data) ? response.data : [])
+      setCards(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching business cards:', error)
       setCards([])
@@ -124,10 +124,10 @@ export default function BusinessCards() {
       const response = await api.post('/business-cards/scan', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      if (response.data) {
+      if (response) {
         setFormData(prev => ({
           ...prev,
-          ...response.data
+          ...response
         }))
       }
     } catch (error) {

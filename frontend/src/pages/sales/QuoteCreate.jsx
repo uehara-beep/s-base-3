@@ -88,7 +88,7 @@ export default function QuoteCreate() {
   const fetchClients = async () => {
     try {
       const response = await api.get('/clients/')
-      setClients(Array.isArray(response.data) ? response.data : [])
+      setClients(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching clients:', error)
       setClients([])

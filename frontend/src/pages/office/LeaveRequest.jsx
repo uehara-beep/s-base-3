@@ -21,7 +21,7 @@ export default function LeaveRequest() {
   const fetchRequests = async () => {
     try {
       const response = await api.get('/leave-requests/')
-      setRequests(Array.isArray(response.data) ? response.data : [])
+      setRequests(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching leave requests:', error)
       setRequests([])

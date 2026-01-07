@@ -15,7 +15,7 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       const response = await api.get(`/dashboard/summary?period=${period}`)
-      setData(response.data)
+      setData(response)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
       // Set mock data for demo

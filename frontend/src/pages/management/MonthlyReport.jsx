@@ -19,7 +19,7 @@ export default function MonthlyReport() {
     try {
       const [year, month] = selectedMonth.split('-')
       const response = await api.get(`/dashboard/monthly-report?year=${year}&month=${month}`)
-      setData(response.data)
+      setData(response)
     } catch (error) {
       console.error('Error fetching report data:', error)
       // Mock data
@@ -64,7 +64,7 @@ export default function MonthlyReport() {
       const response = await api.get(`/dashboard/monthly-report/export?year=${year}&month=${month}`, {
         responseType: 'blob'
       })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const url = window.URL.createObjectURL(new Blob([response]))
       const link = document.createElement('a')
       link.href = url
       link.download = `月次レポート_${selectedMonth}.xlsx`

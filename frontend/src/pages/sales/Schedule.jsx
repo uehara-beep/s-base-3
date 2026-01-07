@@ -28,7 +28,7 @@ export default function Schedule() {
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth() + 1
       const response = await api.get(`/schedules/?year=${year}&month=${month}`)
-      setSchedules(Array.isArray(response.data) ? response.data : [])
+      setSchedules(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching schedules:', error)
       setSchedules([])

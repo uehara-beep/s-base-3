@@ -20,7 +20,7 @@ export default function Expenses() {
   const fetchExpenses = async () => {
     try {
       const response = await api.get(`/expenses/?start_date=${dateRange.start}&end_date=${dateRange.end}`)
-      setExpenses(Array.isArray(response.data) ? response.data : [])
+      setExpenses(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching expenses:', error)
       setExpenses([])

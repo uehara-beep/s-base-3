@@ -16,7 +16,8 @@ export default function QuoteList() {
   const fetchQuotes = async () => {
     try {
       const response = await api.get('/quotes/')
-      setQuotes(Array.isArray(response.data) ? response.data : [])
+      // APIはデータを直接返す（response.dataではなくresponse自体が配列）
+      setQuotes(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching quotes:', error)
       setQuotes([])

@@ -26,7 +26,7 @@ export default function Inventory() {
   const fetchItems = async () => {
     try {
       const response = await api.get('/inventory/')
-      setItems(Array.isArray(response.data) ? response.data : [])
+      setItems(Array.isArray(response) ? response : [])
     } catch (error) {
       console.error('Error fetching inventory:', error)
       setItems([])

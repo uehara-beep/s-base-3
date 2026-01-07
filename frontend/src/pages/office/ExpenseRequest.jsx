@@ -56,12 +56,12 @@ export default function ExpenseRequest() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 
-      if (response.data) {
+      if (response) {
         setFormData(prev => ({
           ...prev,
-          amount: response.data.amount || prev.amount,
-          expense_date: response.data.date || prev.expense_date,
-          description: response.data.store_name || prev.description,
+          amount: response.amount || prev.amount,
+          expense_date: response.date || prev.expense_date,
+          description: response.store_name || prev.description,
         }))
       }
     } catch (error) {

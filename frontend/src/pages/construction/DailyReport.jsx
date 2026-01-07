@@ -32,8 +32,8 @@ export default function DailyReport() {
         api.get(`/daily-reports/?date=${selectedDate}`),
         api.get('/projects/')
       ])
-      setReports(Array.isArray(reportsRes.data) ? reportsRes.data : [])
-      setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : [])
+      setReports(Array.isArray(reportsRes) ? reportsRes : [])
+      setProjects(Array.isArray(projectsRes) ? projectsRes : [])
     } catch (error) {
       console.error('Error fetching data:', error)
       setReports([])

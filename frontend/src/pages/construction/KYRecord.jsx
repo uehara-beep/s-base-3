@@ -114,7 +114,7 @@ export default function KYRecord() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 
-      setAnalysisResult(response.data)
+      setAnalysisResult(response)
     } catch (error) {
       console.error('Photo analysis error:', error)
       setAnalysisResult({
