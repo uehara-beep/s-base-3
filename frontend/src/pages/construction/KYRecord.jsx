@@ -54,10 +54,23 @@ export default function KYRecord() {
 
   const handleSubmit = async () => {
     try {
-      await api.post('/ky-records/', {
-        ...formData,
-        project_id: parseInt(formData.project_id) || null,
-      })
+      // バックエンドスキーマに合わせたデータ変換
+      const participantList = formData.participants ? formData.participants.split(',').map(s => s.trim()) : []
+      const submitData = {
+        record_date: formData.ky_date,
+        project_id: parseInt(formData.project_id) || 1,
+        weather: formData.weather || null,
+        work_content: formData.work_content || '作業内容',
+        hazard_points: formData.hazards || null,
+        countermeasures: formData.countermeasures || null,
+        team_leader: formData.leader_name || null,
+        participants: formData.participants || null,
+        participant_count: participantList.length || 0,
+      }
+
+      console.log('Submitting KY record:', submitData)
+      await api.post('/ky-records/', submitData)
+      alert('KY記録を保存しました')
       setShowModal(false)
       fetchData()
       setFormData({
@@ -73,7 +86,7 @@ export default function KYRecord() {
       })
     } catch (error) {
       console.error('Error saving KY record:', error)
-      alert('保存に失敗しました')
+      alert(`保存に失敗しました: ${error.message || error}`)
     }
   }
 

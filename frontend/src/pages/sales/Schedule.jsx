@@ -123,16 +123,33 @@ export default function Schedule() {
 
   const handleSave = async () => {
     try {
-      if (editingSchedule) {
-        await api.put(`/schedules/${editingSchedule.id}`, formData)
-      } else {
-        await api.post('/schedules/', formData)
+      // バックエンドスキーマに合わせたデータ変換
+      const [dateStr, startTime] = formData.start_datetime?.split('T') || ['', '']
+      const [, endTime] = formData.end_datetime?.split('T') || ['', '']
+
+      const submitData = {
+        title: formData.title || '無題',
+        schedule_type: formData.schedule_type || null,
+        date: dateStr || new Date().toISOString().split('T')[0],
+        start_time: startTime || null,
+        end_time: endTime || null,
+        all_day: !startTime,
+        location: formData.location || null,
+        description: formData.description || null,
       }
+
+      console.log('Submitting schedule:', submitData)
+      if (editingSchedule) {
+        await api.put(`/schedules/${editingSchedule.id}`, submitData)
+      } else {
+        await api.post('/schedules/', submitData)
+      }
+      alert('スケジュールを保存しました')
       setShowModal(false)
       fetchSchedules()
     } catch (error) {
       console.error('Error saving schedule:', error)
-      alert('保存に失敗しました')
+      alert(`保存に失敗しました: ${error.message || error}`)
     }
   }
 

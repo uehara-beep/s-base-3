@@ -466,11 +466,14 @@ export default function QuoteCreate() {
 
     try {
       setLoading(true)
-      await api.post('/quotes/', quoteData)
+      console.log('Saving quote data:', JSON.stringify(quoteData, null, 2))
+      const result = await api.post('/quotes/', quoteData)
+      console.log('Save result:', result)
+      alert('見積を保存しました')
       navigate('/sales/quotes')
     } catch (error) {
       console.error('Error creating quote:', error)
-      alert('見積の保存に失敗しました')
+      alert(`見積の保存に失敗しました: ${error.message || error}`)
     } finally {
       setLoading(false)
     }

@@ -79,24 +79,23 @@ export default function ExpenseRequest() {
 
     try {
       setLoading(true)
-      const submitData = new FormData()
-      submitData.append('category', formData.category)
-      submitData.append('description', formData.description)
-      submitData.append('amount', formData.amount)
-      submitData.append('expense_date', formData.expense_date)
-      submitData.append('payment_method', formData.payment_method)
-      submitData.append('notes', formData.notes)
-      if (formData.receipt) {
-        submitData.append('receipt', formData.receipt)
+      // バックエンドはJSONを期待
+      const submitData = {
+        expense_date: formData.expense_date,
+        category: formData.category || '交通費',
+        description: formData.description,
+        amount: parseFloat(formData.amount) || 0,
+        payment_method: formData.payment_method || null,
+        notes: formData.notes || null,
       }
 
-      await api.post('/expenses/', submitData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      console.log('Submitting expense:', submitData)
+      await api.post('/expenses/', submitData)
+      alert('経費を申請しました')
       navigate('/office/expenses')
     } catch (error) {
       console.error('Error submitting expense:', error)
-      alert('申請に失敗しました')
+      alert(`申請に失敗しました: ${error.message || error}`)
     } finally {
       setLoading(false)
     }

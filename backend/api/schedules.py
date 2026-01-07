@@ -53,7 +53,35 @@ async def get_schedule(schedule_id: int, db: Session = Depends(get_db), current_
 
 @router.post("/")
 async def create_schedule(data: ScheduleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    schedule = Schedule(**data.dict())
+    from datetime import datetime, time
+
+    # 時刻文字列をTimeオブジェクトに変換
+    start_time = None
+    end_time = None
+    if data.start_time:
+        try:
+            start_time = datetime.strptime(data.start_time, "%H:%M").time()
+        except ValueError:
+            pass
+    if data.end_time:
+        try:
+            end_time = datetime.strptime(data.end_time, "%H:%M").time()
+        except ValueError:
+            pass
+
+    schedule = Schedule(
+        title=data.title,
+        schedule_type=data.schedule_type,
+        date=data.date,
+        start_time=start_time,
+        end_time=end_time,
+        all_day=data.all_day,
+        location=data.location,
+        client_id=data.client_id,
+        project_id=data.project_id,
+        employee_id=data.employee_id,
+        description=data.description,
+    )
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
@@ -62,11 +90,38 @@ async def create_schedule(data: ScheduleCreate, db: Session = Depends(get_db), c
 
 @router.put("/{schedule_id}")
 async def update_schedule(schedule_id: int, data: ScheduleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from datetime import datetime
+
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(status_code=404, detail="スケジュールが見つかりません")
-    for key, value in data.dict().items():
-        setattr(schedule, key, value)
+
+    # 時刻文字列をTimeオブジェクトに変換
+    start_time = None
+    end_time = None
+    if data.start_time:
+        try:
+            start_time = datetime.strptime(data.start_time, "%H:%M").time()
+        except ValueError:
+            pass
+    if data.end_time:
+        try:
+            end_time = datetime.strptime(data.end_time, "%H:%M").time()
+        except ValueError:
+            pass
+
+    schedule.title = data.title
+    schedule.schedule_type = data.schedule_type
+    schedule.date = data.date
+    schedule.start_time = start_time
+    schedule.end_time = end_time
+    schedule.all_day = data.all_day
+    schedule.location = data.location
+    schedule.client_id = data.client_id
+    schedule.project_id = data.project_id
+    schedule.employee_id = data.employee_id
+    schedule.description = data.description
+
     db.commit()
     return {"message": "スケジュールが更新されました"}
 

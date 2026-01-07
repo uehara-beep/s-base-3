@@ -78,10 +78,35 @@ export default function DailyReport() {
 
   const handleSubmit = async () => {
     try {
-      await api.post('/daily-reports/', {
-        ...formData,
-        project_id: parseInt(formData.project_id) || null,
-      })
+      // バックエンドスキーマに合わせたデータ変換
+      const submitData = {
+        report_date: formData.report_date,
+        project_id: parseInt(formData.project_id) || 1,
+        employee_id: 1, // TODO: ログインユーザーのemployee_idを使用
+        weather: formData.weather || null,
+        work_content: formData.work_content || null,
+        issues: formData.issues || null,
+        tomorrow_plan: formData.tomorrow_plan || null,
+        labor_costs: formData.labor_entries
+          .filter(e => e.employee_name)
+          .map(e => ({
+            worker_name: e.employee_name,
+            hours: parseFloat(e.work_hours) || 0,
+            rate: 0,
+          })),
+        material_costs: formData.material_entries
+          .filter(e => e.material_name)
+          .map(e => ({
+            material_name: e.material_name,
+            quantity: parseFloat(e.quantity) || 0,
+            unit: e.unit || '個',
+            unit_price: 0,
+          })),
+      }
+
+      console.log('Submitting daily report:', submitData)
+      await api.post('/daily-reports/', submitData)
+      alert('日報を保存しました')
       setShowModal(false)
       fetchData()
       setFormData({
@@ -98,7 +123,7 @@ export default function DailyReport() {
       })
     } catch (error) {
       console.error('Error saving report:', error)
-      alert('保存に失敗しました')
+      alert(`保存に失敗しました: ${error.message || error}`)
     }
   }
 

@@ -72,7 +72,19 @@ export default function LeaveRequest() {
     }
 
     try {
-      await api.post('/leave-requests/', formData)
+      const days = calculateDays(formData.start_date, formData.end_date)
+      const submitData = {
+        employee_id: 1, // TODO: ログインユーザーのemployee_idを使用
+        leave_type: formData.leave_type || 'paid',
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        days: days,
+        reason: formData.reason || null,
+      }
+
+      console.log('Submitting leave request:', submitData)
+      await api.post('/leave-requests/', submitData)
+      alert('休暇を申請しました')
       setShowModal(false)
       setFormData({
         leave_type: 'paid',
@@ -83,7 +95,7 @@ export default function LeaveRequest() {
       fetchRequests()
     } catch (error) {
       console.error('Error submitting leave request:', error)
-      alert('申請に失敗しました')
+      alert(`申請に失敗しました: ${error.message || error}`)
     }
   }
 
