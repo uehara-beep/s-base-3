@@ -21,9 +21,13 @@ class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const headers = {
-      'Content-Type': 'application/json',
       ...options.headers,
     };
+
+    // Don't set Content-Type for FormData (browser will set it with boundary)
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     const token = this.getToken();
     if (token) {
@@ -53,10 +57,19 @@ class ApiService {
     return this.request(endpoint);
   }
 
-  post(endpoint, data) {
+  post(endpoint, data, options = {}) {
+    // Check if data is FormData (for file uploads)
+    if (data instanceof FormData) {
+      return this.request(endpoint, {
+        method: 'POST',
+        body: data,
+        ...options,
+      });
+    }
     return this.request(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
+      ...options,
     });
   }
 

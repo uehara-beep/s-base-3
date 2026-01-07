@@ -140,11 +140,8 @@ export default function QuoteCreate() {
 
     try {
       setLoading(true)
-      const response = await api.post('/quotes/import-excel', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-
-      const data = response.data
+      // Note: Don't set Content-Type header for FormData - browser sets it automatically with boundary
+      const data = await api.post('/quotes/import-excel', formData)
       console.log('Excel import response:', data)
 
       if (data && data.success) {
